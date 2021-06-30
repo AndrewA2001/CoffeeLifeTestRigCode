@@ -68,15 +68,11 @@ brew_weight = 0  # in g
 # Serial ports
 arduino_ser = ""
 scale_ser = ""
-unit_ser = ""
+unit_ser = "serial.Serial(port='/dev/ttyACM0', baudrate=9600)"
 
-# test_param = "Station: {}, Unit: {}, Mode: {}, Size: {}, Style: {}, Macro: {}, Start Cycle: {}, " \
-#              "Current Cycle: {}, Number of cycles: {}, Auto shutoff temp.: {}C, Boiler Cool temp.: {}C, " \
-#              "Vessel Cool temp: {}C, Cool time: {}min., Max Brew time: {}min, Filename Extra: {}" \
-#     .format(station, unit, mode, size, style, macro, start_cycle, current_cycle, number_of_cycles,
-#             auto_shutoff_temp, boiler_cool_temp, vessel_cool_temp, cool_time, max_brew_time, filename_extra)
 
-# flags
+# flags to indicate whether the components are on, connected or the unit is stopped 
+
 unit_fan_flag = 0  # unit fans off
 vessel_fan_flag = 0  # vessel fans off
 vessel_drain_flag = 0  # vessel drain pump off
@@ -85,13 +81,16 @@ unit_connect_flag = 0  # Unit disconnected
 scale_connect_flag = 0  # Scale disconnected
 start_stop_flag = 0  # Stopped
 
+
+
+#4 bit byte sent to the arduino in order to turn on or turn off the 
 VESSEL_PUMP_ON = b'$0010&\n'
-POWER_OFF = b'$0000&\n'
 VESSEL_FANS_ON = b'$0100&\n'
 UNIT_FANS_ON = b'$0001&\n'
+POWER_OFF = b'$0000&\n'
 
 
-# Styling
+# Styling for the GUI
 class Styling:
     aux_button = (
         "background-color: transparent;"
@@ -126,7 +125,9 @@ class Styling:
 # Arduino communication
 class ArduinoComm(object):
     # Commands - Output
-    RESERVOIR_PUMP_ON = "A"
+    RESERVOIR_PUMP_ON = "A" #leave this variable declared, it is used for running a prebrew cycle 
+    
+    
     # ESERVOIR_PUMP_OFF = "B"
 
     # VESSEL_PUMP_OFF = "D"
@@ -137,63 +138,92 @@ class ArduinoComm(object):
 
     STOP_ALL = "X"
 
+    
+    
+    
+    #important initialization for GUI items 
     def __init__(self):
         self.threadpool = QtCore.QThreadPool()
         self.do_init = QtCore.QEvent.registerEventType()
-
+        
+        
+#This function is used to toggle the vessel fan from the GUI on and off
+#the information is also logged via logging 
+        
     @staticmethod
     def vessel_fan_toggle():
+        
+        #global variables imported to send specific bytes to arduino along with the flags and cool time enteredby the GUI 
         global vessel_fan_flag
         global VESSEL_FANS_ON
         global POWER_OFF
         global cool_time
+        
+        #if the flag is 0(off) then the function when called will turn it on by writing serial data to the arduino to turn it on and 
+        #if the respective flag is 1(on) then the function will turn it off by writing serial data to the arduino 
         try:
-            if vessel_fan_flag == 0:
+            if vessel_fan_flag == 0: 
                 # arduino_ser.write(b'$C&\n')
-                arduino_ser.write(VESSEL_FANS_ON)
+                arduino_ser.write(VESSEL_FANS_ON) #writing respective global variable
                 logging.info('Vessel fans are on')
                 vessel_fan_flag = 1
+               #
             else:
                 logging.info('Vessel fans are off')
                 vessel_fan_flag = 0
                 # arduino_ser.write(b'$C&\n')
-                arduino_ser.write(POWER_OFF)
-
+                arduino_ser.write(POWER_OFF) #writing respective global variable
+        #logs if problem occurs 
         except Exception:
             logging.exception("Exception occurred", exc_info=True)
+            
+    
+#This function is used to toggle the Unit fan from the GUI on and off
+#the information is also logged via logging 
 
     @staticmethod
     def unit_fan_toggle():
+        #global variables imported to send specific bytes to arduino along with the flags and cool time enteredby the GUI 
         global unit_fan_flag
         global POWER_OFF
         global UNIT_FANS_ON
         global cool_time
         try:
+            #if the flag is 0(off) then the function when called will turn it on by writing serial data to the arduino to turn it on and 
+            #if the respective flag is 1(on) then the function will turn it off by writing serial data to the arduino 
             if unit_fan_flag == 0:
-                arduino_ser.write(b'$C&\n')
-                arduino_ser.write(UNIT_FANS_ON)
+                arduino_ser.write(b'$C&\n') #writes a startig statement to initialize the unit if it hasnt already
+                arduino_ser.write(UNIT_FANS_ON) #writes the respective global variable to the arduino 
                 logging.info('Unit fans are on')
                 unit_fan_flag = 1
             else:
                 logging.info('Unit fans are off')
                 unit_fan_flag = 0
-                arduino_ser.write(b'$C&\n')
-                arduino_ser.write(POWER_OFF)
-
+                arduino_ser.write(b'$C&\n')  #writes a startig statement to initialize the unit if it hasnt already
+                arduino_ser.write(POWER_OFF) #writes the respective global variable to the arduino this on powers off the vessel fan
+        #logs if a probem occured 
         except Exception:
             logging.exception("Exception occurred", exc_info=True)
 
+    
+#This function is used to toggle the Unit fan from the GUI on and off
+#the information is also logged via logging 
+
     @staticmethod
     def vessel_drain_toggle():
+        #global variables important to send secific bytes to arduino along with flags and cool time entered by the GUI 
         global vessel_drain_flag
         global VESSEL_PUMP_ON
         global POWER_OFF
         global cool_time
 
         try:
+            #if the flag is 0(off) then the function when called will turn it on by writing serial data to the arduino to turn it on and 
+            #if the respective flag is 1(on) then the function will turn it off by writing serial data to the arduino 
+            
             if vessel_drain_flag == 0:
                 # arduino_ser.write(b'$C&\n')
-                arduino_ser.write(VESSEL_PUMP_ON)
+                arduino_ser.write(VESSEL_PUMP_ON) #writes the vessel fan on seding onformation to the arduino i 
                 logging.info('Vessel Draining')
                 vessel_drain_flag = 1
             else:
@@ -206,6 +236,9 @@ class ArduinoComm(object):
             logging.exception("Exception occurred", exc_info=True)
 
     @staticmethod
+    
+    #This function runs before a brew occurs and turns on the resevoir pump to fill up the coffee machine resevoir 
+    
     def arduino_pre_brew():
         # This function checks for all water float status (Reservoir, Vessel and Drain drum), power
         try:
@@ -228,14 +261,16 @@ class ArduinoComm(object):
         arduino_ser.write(POWER_OFF)
 
 
-# Weight information from the scale
+# Weight information from the scale to collect data 
+
+#This function collects data from the scale in order to measure the brew weight
+
 def scale_data():
     global scale_ser, brew_weight
     scale_output = scale_ser.readline()
     scale_output.strip()
-    y = scale_output.decode("utf-8", "replace")
-    scale_pattern = r"([\w]+)(,)([\+|-])([\d\.]+)(\s+)([\w]+)"
-
+    y = scale_output.decode("utf-8", "replace") #decodes the data from scall output
+    scale_pattern = r"([\w]+)(,)([\+|-])([\d\.]+)(\s+)([\w]+)" # parses the read data from the scale into a readable format
     match = re.match(scale_pattern, y)
 
     if match is not None:
@@ -244,6 +279,9 @@ def scale_data():
         print("Scale weight: {}".format(brew_weight))
         return brew_weight
 
+    
+    
+#BDP data Dont need to worry about  this at the moment but may be useful in the future
 
 class UnitComm:
     # CFP communication
@@ -321,6 +359,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Oulling Data from GUI
         # self.updateCoolDownTime()
         self.ui.DSB_CoolTime.valueChanged.connect(self.update_cool_down_time)
+        
+        
+   #This function updates the respective mode of the GUI based off the SKU that us selected in the GUI 
 
     def update_mode_combo(self):
         self.ui.CB_Mode.clear()
@@ -331,7 +372,7 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.ui.CB_SKU.currentText() == "CM400":  # CM400
             self.ui.CB_Mode.addItems(['Coffee', 'Clean'])
 
-    # Update styles based on SKU and Mode
+    # This function Update styles based on SKU and Mode
     def update_style_combo(self):
         self.ui.CB_Style.clear()
 
@@ -361,7 +402,7 @@ class MainWindow(QtWidgets.QMainWindow):
         elif self.ui.CB_Mode.currentText() == "Clean":
             self.ui.CB_Size.addItems(['Full Carafe'])
 
-    # Update sizes based on SKU, mode and style
+    # This function Update sizes based on SKU, mode and style
     def update_size_combo(self):
         self.ui.CB_Size.clear()
         style = self.ui.CB_Style.currentText()
@@ -419,8 +460,15 @@ class MainWindow(QtWidgets.QMainWindow):
             elif self.ui.CB_Mode.currentText() == "Clean":
                 self.ui.CB_Size.clear()
                 self.ui.CB_Size.addItems(["Full Carafe"])
+                
+                
+                
 
-    # Serial connections
+    # Serial connections made for various aspects of the code 
+    
+    #This function takes care of the raspberry pi and the arduino connected with each other and updates tje
+    #the GUI respectively 
+    
     def arduino_connect(self):
         global arduino_connect_flag, arduino_ser
 
@@ -453,6 +501,8 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
                 logging.exception("Exception occurred", exc_info=True)
+                
+    #can ignore for now no BDP protocol implemented to test
 
     def unit_connect(self):
         global unit_connect_flag, unit_ser
@@ -488,6 +538,9 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 logging.exception("Exception occurred", exc_info=True)
                 QMessageBox.critical(self, "Error", str(e))
+                
+                
+    #Function that verifies that the scale has been connected and updates the GUI respectively             
 
     def scale_connect(self):
         global scale_connect_flag, scale_ser
@@ -513,6 +566,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 logging.exception("Exception occurred", exc_info=True)
                 QMessageBox.critical(self, "Error", str(e))
 
+    
+    
+    
     # File directory and Filename creation
     def file_manager(self, station, unit, current_cycle, filename_extra):
         # SKU and station info
@@ -605,10 +661,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_manager(station, unit, current_cycle, filename_extra)
         self.start_end_brew()
 
+        
+       #This function updates the respective cool time of the unit based off of input from the gui
+        
     def update_cool_down_time(self):
         global cool_time
         cool_time = self.ui.DSB_CoolTime.value()
         print(cool_time)
+        
+        
+        
+        
+    #This function begins a brew cycle and is initiated by hitting the green button on the bottom of the GUI 
 
     def start_end_brew(self):
         global start_stop_flag, current_cycle, start_cycle
@@ -638,6 +702,7 @@ class MainWindow(QtWidgets.QMainWindow):
             QMessageBox.critical(self, "Error", str(e))
 
     # Sends stop signal to the unit and the arduino to stop/disable all functions
+    #Initiated by pressing the RED stop button at the bottom of the GUI
     def stop_everything(self):
         QMessageBox.critical(self, "Application stopped", "Application stopped")
         logging.info("Application stopped")
